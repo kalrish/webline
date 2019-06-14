@@ -1,0 +1,77 @@
+---
+version: 0.2
+
+env:
+   parameter-store:
+      foo: /var
+
+phases:
+   install:
+      commands:
+         - >-
+            pip
+            --no-color
+            install
+            --progress-bar off
+            --target slapper
+            --no-compile
+            -r slapper/requirements.txt
+         - cd slapup
+         - >-
+            python
+            --
+            setup.py
+            install
+   build:
+      commands:
+         - cd ..
+         - >-
+            slapup
+            --token "${SLACK_TOKEN}"
+            --tester david.porcel@smaato.com
+            --tester denny.schaefer@smaato.com
+            "${SLACK_CHANNEL}"
+            > data.json
+         - >-
+            zip
+            -q
+            -9
+            slapper_data.zip
+            --
+            data.json
+         - cd slapper
+         - >-
+            zip
+            -q
+            -r
+            -9
+            ../slapper.zip
+            -x requirements.txt
+            --
+            .
+         - cd ..
+         - >-
+            aws cloudformation package
+            --template-file cfn/slapper.yaml
+            --s3-bucket "${ARTIFACTS_BUCKET}"
+            --s3-prefix slapper
+            --output-template-file slapper.yaml
+         - >-
+            jq -c
+            --arg event_queue_name "${EVENT_QUEUE_NAME}"
+            --arg slack_annoy "${SLACK_ANNOY}"
+            --arg statsd_endpoint "${STATSD_ENDPOINT}"
+            --arg statsd_prefix "${STATSD_PREFIX}"
+            --arg vpc "${VPC}"
+            --arg tag_env "${TAG_ENV}"
+            '.Parameters.EventQueue = $event_queue_name | .Parameters.Annoy = $slack_annoy | .Parameters.StatsDEndpoint = $statsd_endpoint | .Parameters.StatsDPrefix = $statsd_prefix | .Parameters.Vpc = $vpc | .Tags.Env = $tag_env'
+            --
+            cfn/slapper.json
+            > slapper.json
+
+artifacts:
+   base-directory: cfn
+   files:
+      - slapper.json
+      - slapper.yaml
+      - slapper.zip
