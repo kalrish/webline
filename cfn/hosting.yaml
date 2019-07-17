@@ -1,0 +1,180 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Hosting for a website.'
+Metadata:
+   AWS::CloudFormation::Interface:
+      ParameterLabels:
+         Branch:
+            default: 'Branch'
+         Bucket:
+            default: 'Bucket'
+         CloudFrontPriceClass:
+            default: 'Price class'
+         Domain:
+            default: 'Domain'
+         HostedZoneId:
+            default: 'Hosted zone'
+         Type:
+            default: 'Deployment type'
+Parameters:
+   Branch:
+      Description: 'Name of the git branch that runs through this pipeline.'
+      Type: String
+   Bucket:
+      Description: 'Name of the S3 bucket that hosts the website files.'
+      Type: String
+   CloudFrontPriceClass:
+      Description: 'Price class for CloudFront distribution.'
+      Type: String
+      AllowedValues:
+         - PriceClass_100
+         - PriceClass_200
+         - PriceClass_All
+      Default: PriceClass_100
+   Domain:
+      Description: 'Base domain of the website.'
+      Type: String
+      AllowedPattern: '^$'
+      ConstraintDescription: 'must abide by domain name restrictions'
+   HostedZoneId:
+      Description: 'ID of the Route 53 hosted zone in which to create DNS records.'
+      Type: AWS::Route53::HostedZone::Id
+   Type:
+      Description: 'Type of the deployment.'
+      Type: String
+      AllowedValues:
+         - master
+         - preview
+Conditions:
+   MasterDeployment: !Equals
+      - !Ref Type
+      - master
+   PreviewDeployment: !Equals
+      - !Ref Type
+      - preview
+Resources:
+   WebsiteBucket:
+      Type: AWS::S3::Bucket
+   LanguageRedirectionRole:
+      Type: AWS::IAM::Role
+      Properties:
+         AssumeRolePolicyDocument:
+            Version: 2012-10-17
+            Statement:
+               -
+                  Principal:
+                     Service: !Sub 'lambda.${AWS::URLSuffix}'
+                  Action: sts:AssumeRole
+                  Effect: Allow
+         Policies:
+            -
+               PolicyName: logs
+               PolicyDocument:
+                  Version: 2012-10-17
+                  Statement:
+                     -
+                        Action:
+                           - logs:CreateLogGroup
+                        Resource: '*'
+                        Effect: Allow
+                     -
+                        Action:
+                           - logs:CreateLogStream
+                           - logs:PutLogEvents
+                        Resource:
+                           - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+                           - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*:*:*'
+                        Effect: Allow
+   LanguageRedirectionFunction:
+      Type: AWS::Lambda::Function
+      Properties:
+         Code:
+            S3Bucket: !Ref LambdaBucket
+            S3ObjectKey: !Ref lalala
+         Environment:
+            Variables:
+               FOO: bar
+         Handler: index.handler
+         Layers:
+            - !Ref Data
+         Role: !GetAtt LanguageRedirectionRole.Arn
+         Runtime: nodejs
+         Timeout: 10
+   Distribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+         DistributionConfig:
+            Enabled: true
+            Aliases:
+               - !If
+                  - MasterDeployment
+                  - !Sub '${Project}.www.${Domain}'
+                  - !Sub '${Branch}.${Project}.www.${Domain}'
+            CacheBehaviors:
+               -
+                  PathPattern: '*'
+                  AllowedMethods:
+                     - GET
+                  CachedMethods:
+                     - GET
+                  Compress: false
+                  DefaultTTL: 3
+                  MinTTL: 2
+                  MaxTTL: 4
+                  ViewerProtocolPolicy: redirect-to-https
+               -
+                  PathPattern: ''
+                  AllowedMethods:
+                     - GET
+                  Compress: false
+                  LambdaFunctionAssociations:
+                     -
+                        EventType: viewer-request
+                        LambdaFunctionARN: !GetAtt LanguageRedirectionFunction.Arn
+            HttpVersion: http2
+            IPV6Enabled: true
+            Origins:
+               -
+                  Id: s3
+                  DomainName: !Sub 'BucketDomainName'
+                  DomainName: !If
+                     - MasterDeployment
+                     - !GetAtt WebsiteBucket.DomainName
+                     - !Ref BucketDomainName
+                  OriginPath: !If
+                     - PreviewDeployment
+                     - !Sub '/${Path}'
+                     - !Ref AWS::NoValue
+            PriceClass: !Ref CloudFrontPriceClass
+   Records:
+      Type: AWS::Route53::RecordSetGroup
+      Properties:
+         HostedZoneId: !Ref HostedZoneId
+         RecordSets:
+            -
+               Name: !If
+                  - MasterDeployment
+                  - !Sub '${Project}.www.${Domain}'
+                  - !Sub '${Branch}.${Project}.www.${Domain}'
+               Type: A
+               AliasTarget: !GetAtt Distribution.DomainName
+            -
+               Name: !If
+                  - MasterDeployment
+                  - !Sub '${Project}.www.${Domain}'
+                  - !Sub '${Branch}.${Project}.www.${Domain}'
+               Type: AAAA
+               AliasTarget: !GetAtt Distribution.DomainName
+Outputs:
+   BucketName: !If
+      - MasterDeployment
+      -
+         Description: 'Name of the Codepipeline.'
+         Value: !Ref WebsiteBucket
+      - !Ref AWS::NoValue
+   BucketDomainName: !If
+      - MasterDeployment
+      -
+         Description: 'Name of the Codepipeline.'
+         Value: !GetAtt WebsiteBucket.DomainName
+      - !Ref AWS::NoValue
