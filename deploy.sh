@@ -4,11 +4,12 @@ set -e
 aws cloudformation deploy \
 	--stack-name webline \
 	--template-file cfn/bootstrap.yaml \
+	--no-fail-on-empty-changeset \
 	#
 
 bucket="$(
 	aws \
-		--query 'Stacks[0].Outputs[OutputKey==Bucket].OutputValue' \
+		--query 'Stacks[0].Outputs[?OutputKey==`Bucket`].OutputValue' \
 		--output text \
 		cloudformation describe-stacks \
 		--stack-name webline \
@@ -20,7 +21,7 @@ aws s3 cp \
 	--recursive \
 	--exclude bootstrap.yaml \
 	cfn \
-	"s3://${bucket}/cfn/" \
+	"s3://${bucket}/v1/cfn/" \
 	#
 
 make buildspecs
