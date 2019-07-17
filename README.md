@@ -1,40 +1,25 @@
 webLine: AWS-based website deployment system
 ================================================================================
 
-webLine
+webLine is a website build and deployment solution based on AWS.
 
 
-Features
+Overview
 --------------------------------------------------------------------------------
 
- -  Listen to GitHub
- -  Branch deployments for preview & testing
+webLine is the core of a CI/CD solution for websites. Thus, by itself, webLine is useless. Instead, an integration for your website's code repository must handle.
 
 
 Installation
 --------------------------------------------------------------------------------
 
- -  AWS account
- -  AWS SAM CLI
- 
-    -  Lambda function
-    -  API gateway
-    -  CloudFormation stack template (cfn/pipeline/template.yaml) (or embedded in the Lambda function?)
+To install webLine, you will need:
 
+ -  an AWS account
+ -  [GNU make](https://www.gnu.org/software/make/) >= 3.82
+ -  a shell (for instance, [Bash](https://www.gnu.org/software/bash/) or [DASH](http://gondor.apana.org.au/~herbert/dash/))
+ -  the [AWS CLI](https://aws.amazon.com/cli/)
 
-Architecture
---------------------------------------------------------------------------------
+If you meet the above requirements:
 
-Three CloudFormation stacks:
-
- -  `www-me-github`
- -  ``
-
-
-DNS hierarchy
---------------------------------------------------------------------------------
-
- -  Root: `www.djsp.eu`.
- -  Personal website: `me.www.djsp.eu`.
- -  Blog: `blog.www.djsp.eu`.
- -  Flaschenpost: `flaschenpost.www.djsp.eu`.
+ 1.  Run the deployment script.
