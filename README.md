@@ -22,4 +22,12 @@ To install webLine, you will need:
 
 If you meet the above requirements:
 
- 1.  Run the deployment script.
+ 1.  Create the webLine bucket.
+
+     You can use the [CloudFormation stack template](cfn/bucket.yaml) provided.
+
+ 2.  Build the artifacts.
+
+ 3.  Upload artifacts to the webLine bucket.
+
+     Once you have built all the artifacts, upload them to the webLine bucket
