@@ -3,7 +3,7 @@ set -e
 
 aws cloudformation deploy \
 	--stack-name webline \
-	--template-file cfn/bootstrap.yaml \
+	--template-file cfn/bucket.yaml \
 	--no-fail-on-empty-changeset \
 	#
 
@@ -19,7 +19,7 @@ bucket="$(
 aws s3 cp \
 	--no-progress \
 	--recursive \
-	--exclude bootstrap.yaml \
+	--exclude bucket.yaml \
 	cfn \
 	"s3://${bucket}/v1/cfn/" \
 	#
