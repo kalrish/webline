@@ -35,11 +35,10 @@ Resources:
                      Service: !Sub 'codepipeline.${AWS::URLSuffix}'
                   Action: sts:AssumeRole
                   Effect: Allow
-   Fn::Transform:
-      Name: AWS::Include
-      Parameters:
-         Bucket: !Ref WebsiteBucket
-         Key: !Sub '${Branch}/cfn/fragments/pipeline/resources.yaml'
+   Resources:
+      Type: AWS::CloudFormation::Stack
+      Properties:
+         TemplateURL: !Sub 'https://${Bucket}.s3.amazonaws.com/${Branch}/resources.yaml'
    Pipeline:
       Type: AWS::CodePipeline::Pipeline
       Properties:
