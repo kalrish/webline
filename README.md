@@ -10,24 +10,21 @@ Overview
 webLine is the core of a CI/CD solution for websites. Thus, by itself, webLine is useless. Instead, an integration for your website's code repository must handle.
 
 
+Requirements
+--------------------------------------------------------------------------------
+
+ -  an AWS account
+
+
 Installation
 --------------------------------------------------------------------------------
 
-To install webLine, you will need:
+ 1.  Deploy webPipe's bridgehead.
 
- -  an AWS account
- -  [GNU make](https://www.gnu.org/software/make/) >= 3.82
- -  a shell (for instance, [Bash](https://www.gnu.org/software/bash/) or [DASH](http://gondor.apana.org.au/~herbert/dash/))
- -  the [AWS CLI](https://aws.amazon.com/cli/)
+     Use the [CloudFormation stack template](cfn/foothold.yaml) provided.
 
-If you meet the above requirements:
+ 2.  Install or enable a source integration.
 
- 1.  Create the webLine bucket.
+     The source integration you use depends on where your code is.
 
-     You can use the [CloudFormation stack template](cfn/bucket.yaml) provided.
-
- 2.  Build the artifacts.
-
- 3.  Upload artifacts to the webLine bucket.
-
-     Once you have built all the artifacts, upload them to the webLine bucket
+     Follow the instructions specific to the source integration.

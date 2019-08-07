@@ -1,0 +1,244 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Description: 'Foothold for webLine source integrations.'
+
+
+Metadata:
+   AWS::CloudFormation::Interface:
+      ParameterGroups:
+         -
+            Label: webLine
+            Parameters:
+               - Id
+               - WebLineAccount
+
+      ParameterLabels:
+         Id:
+            default: ID
+         WebLineAccount:
+            default: webLine account
+
+
+Parameters:
+   Id:
+      Description: 'ID assigned to you when you installed the webLine source integration.'
+      Type: String
+      NoEcho: true
+   WebLineAccount:
+      Description: 'ID of the AWS account that hosts the webLine source integration.'
+      Type: String
+
+
+Resources:
+   AppRole:
+      Type: AWS::IAM::Role
+      Properties: {
+         AssumeRolePolicyDocument: {
+            Version: 2012-10-17,
+            Statement: [
+               {
+                  Principal: {
+                     AWS: {
+                        Ref: WebLineAccount,
+                     },
+                  },
+                  Action: [
+                     'sts:AssumeRole',
+                  ],
+                  Condition: {
+                     StringEquals: {
+                        'sts:ExternalId': {
+                           Ref: Id,
+                        },
+                     },
+                  },
+                  Effect: Allow,
+               },
+            ],
+         },
+         Policies: [
+            {
+               PolicyName: pipeline-deployment,
+               PolicyDocument: {
+                  Version: 2012-10-17,
+                  Statement: [
+                     {
+                        Action: [
+                           'cloudformation:CreateStack',
+                           'cloudformation:DeleteStack',
+                           'cloudformation:DescribeStacks',
+                           'cloudformation:UpdateStack',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webline-pipeline-*/*',
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                     {
+                        Action: [
+                           'iam:PassRole',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::GetAtt': [
+                                 CloudFormationRole,
+                                 Arn,
+                              ],
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                  ],
+               },
+            },
+            {
+               PolicyName: pipeline-feed,
+               PolicyDocument: {
+                  Version: 2012-10-17,
+                  Statement: [
+                     {
+                        Action: [
+                           's3:DeleteObject',
+                           's3:PutObject',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': '${BridgeBucket.Arn}/*',
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                  ],
+               },
+            },
+            {
+               PolicyName: pipeline-control,
+               PolicyDocument: {
+                  Version: 2012-10-17,
+                  Statement: [
+                     {
+                        Action: [
+                           'codepipeline:StartPipelineExecution',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webline*',
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                  ],
+               },
+            },
+         ]
+
+   # To deploy a webLine pipeline, an S3 bucket
+   # containing certain files.
+   BridgeBucket:
+      Type: AWS::S3::Bucket
+      Properties: {
+      }
+
+   CloudFormationRole:
+      Type: AWS::IAM::Role
+      Properties: {
+         AssumeRolePolicyDocument: {
+            Version: 2012-10-17,
+            Statement: [
+               {
+                  Principal: {
+                     Service: [
+                        {
+                           'Fn::Sub': 'cloudformation.${AWS::URLSuffix}',
+                        },
+                     ],
+                  },
+                  Action: [
+                     'sts:AssumeRole',
+                  ],
+                  Effect: Allow,
+               },
+            ],
+         },
+         Policies: [
+            {
+               PolicyName: management,
+               PolicyDocument: {
+                  Version: 2012-10-17,
+                  Statement: [
+                     {
+                        Sid: codepipeline,
+                        Action: [
+                           'codepipeline:CreatePipeline',
+                           'codepipeline:DeletePipeline',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webline*',
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: codebuild,
+                        Action: [
+                           'codebuild:CreateProject',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webline*',
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: iam,
+                        Action: [
+                           'iam:AttachRolePolicy',
+                           'iam:CreateRole',
+                           'iam:DeleteRole',
+                           'iam:DeleteRolePermissionsBoundary',
+                           'iam:DeleteRolePolicy',
+                           'iam:DetachRolePolicy',
+                           'iam:GetRole',
+                           'iam:GetRolePolicy',
+                           'iam:ListAttachedRolePolicies',
+                           'iam:ListRolePolicies',
+                           'iam:ListRoleTags',
+                           'iam:PutRolePermissionsBoundary',
+                           'iam:PutRolePolicy',
+                           'iam:TagRole',
+                           'iam:UntagRole',
+                           'iam:UpdateAssumeRolePolicy',
+                           'iam:UpdateRole',
+                           'iam:UpdateRoleDescription',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/webline-pipeline-*',
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                  ],
+               },
+            },
+         ],
+      }
+
+
+Outputs:
+   Role: !If
+      Description: 'Name of the IAM role.'
+      Value:
+         Ref: Role
+   RoleArn: !If
+      Description: 'ARN of the IAM role.'
+      Value:
+         Fn::GetAtt:
+            - Role
+            - Arn
