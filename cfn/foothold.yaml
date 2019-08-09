@@ -143,6 +143,8 @@ Resources:
       Properties: {
       }
 
+   # This IAM role lets CloudFormation create and delete
+   # the webpipe pipeline stack.
    CloudFormationRole:
       Type: AWS::IAM::Role
       Properties: {
