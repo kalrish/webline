@@ -1,0 +1,49 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Description: 'Public webpipe artifacts.'
+
+
+Resources:
+   Bucket:
+      Type: AWS::S3::Bucket
+      Properties: {
+         AccessControl: AuthenticatedRead,
+         # FIXME: make requester pay for requests
+      }
+
+   BucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties: {
+         Bucket: {
+            Ref: Bucket,
+         },
+         PolicyDocument: {
+            Statement: [
+               {
+                  Sid: enable,
+                  Principal: {
+                     AWS: '*',
+                  },
+                  Action: [
+                     's3:GetObject',
+                     's3:GetObjectVersion',
+                  ],
+                  Resource: [
+                     {
+                        'Fn::Sub': '${Bucket.Arn}/v1/*'
+                     },
+                  ],
+                  Effect: Allow,
+               },
+            ],
+         },
+      }
+
+
+Outputs:
+   Bucket:
+      Description: Name of the S3 bucket.
+      Value:
+         Ref: Bucket
