@@ -50,9 +50,11 @@ Resources:
             Statement: [
                {
                   Principal: {
-                     Service: {
-                        'Fn::Sub': 'codepipeline.${AWS::URLSuffix}',
-                     },
+                     Service: [
+                        {
+                           'Fn::Sub': 'codepipeline.${AWS::URLSuffix}',
+                        },
+                     ],
                   },
                   Action: [
                      'sts:AssumeRole',
@@ -61,6 +63,110 @@ Resources:
                },
             ],
          },
+      }
+
+   StackPreviewRole:
+      Type: AWS::IAM::Role
+      Properties: {
+         Path: /webpipe/pipeline/,
+         PermissionsBoundary: {
+            Ref: PermissionsBoundaryArn,
+         },
+         AssumeRolePolicyDocument: {
+            Version: 2012-10-17,
+            Statement: [
+               {
+                  Principal: {
+                     Service: [
+                        {
+                           'Fn::Sub': 'cloudformation.${AWS::URLSuffix}',
+                        },
+                     ],
+                  },
+                  Action: [
+                     'sts:AssumeRole',
+                  ],
+                  Effect: Allow,
+               },
+            ],
+         },
+         Policies: [
+         ]
+      }
+
+   PipelineDeployPreviewRole:
+      Type: AWS::IAM::Role
+      Properties: {
+         Path: /webpipe/pipeline/,
+         PermissionsBoundary: {
+            Ref: PermissionsBoundaryArn,
+         },
+         AssumeRolePolicyDocument: {
+            Version: 2012-10-17,
+            Statement: [
+               {
+                  Principal: {
+                     AWS: [
+                        {
+                           'Fn::GetAtt': [
+                              PipelineRole,
+                              Arn,
+                           ],
+                        },
+                     ],
+                  },
+                  Action: [
+                     'sts:AssumeRole',
+                  ],
+                  Effect: Allow,
+               },
+            ],
+         },
+         Policies: [
+            {
+               PolicyName: cloudformation,
+               PolicyDocument: {
+                  Version: 2012-10-17,
+                  Statement: [
+                     {
+                        Action: [
+                           'cloudformation:CreateStack',
+                           'cloudformation:DeleteStack',
+                           'cloudformation:DescribeStacks',
+                           'cloudformation:UpdateStack',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-${Project}-hosting-${Branch}/*',
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                     {
+                        Action: [
+                           'iam:PassRole',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::GetAtt': [
+                                 StackPreviewRole,
+                                 Arn,
+                              ],
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'iam:PassedToService': {
+                                 Fn::Sub: 'cloudformation.${AWS::URLSuffix}',
+                              },
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                  ],
+               },
+            },
+         ]
       }
 
    Resources:
