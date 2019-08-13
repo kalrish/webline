@@ -1,16 +1,27 @@
 ---
 AWSTemplateFormatVersion: 2010-09-09
-Description: 'webLine pipeline for a website.'
+
+
+Description: webpipe pipeline for a website.
+
+
 Parameters:
    Branch:
       Description: 'Name of the git branch that runs through this pipeline.'
       Type: String
+
+   PermissionsBoundaryArn:
+      Description: 'ARN of the IAM managed policy to use as permissions boundary.'
+      Type: String
+
    SourceProvider:
       Description: 'Provider of the repository that hosts the code.'
       Type: String
       AllowedValues:
          - CodeCommit
          - GitHub
+
+
 Mappings:
    Sources:
       CodeCommit:
@@ -21,228 +32,395 @@ Mappings:
          ActionOwner: ThirdParty
          ActionProvider: GitHub
          ActionVersion: '1'
+
+
 Resources:
    PipelineBucket:
       Type: AWS::S3::Bucket
+
    PipelineRole:
       Type: AWS::IAM::Role
-      Properties:
-         AssumeRolePolicyDocument:
-            Version: 2012-10-17
-            Statement:
-               -
-                  Principal:
-                     Service: !Sub 'codepipeline.${AWS::URLSuffix}'
-                  Action: sts:AssumeRole
-                  Effect: Allow
+      Properties: {
+         Path: /webpipe/pipeline/,
+         PermissionsBoundary: {
+            Ref: PermissionsBoundaryArn,
+         },
+         AssumeRolePolicyDocument: {
+            Version: 2012-10-17,
+            Statement: [
+               {
+                  Principal: {
+                     Service: {
+                        'Fn::Sub': 'codepipeline.${AWS::URLSuffix}',
+                     },
+                  },
+                  Action: [
+                     'sts:AssumeRole',
+                  ],
+                  Effect: Allow,
+               },
+            ],
+         },
+      }
+
    Resources:
       Type: AWS::CloudFormation::Stack
-      Properties:
-         TemplateURL: !Sub 'https://${Bucket}.s3.amazonaws.com/${Branch}/resources.yaml'
+      Properties: {
+         TemplateURL: {
+            'Fn::Sub': 'https://${Bucket}.s3.amazonaws.com/${Branch}/resources.yaml',
+         },
+         Parameters: {
+            PermissionsBoundaryArn: {
+               Ref: PermissionsBoundaryArn,
+            },
+         },
+      }
+
    Pipeline:
       Type: AWS::CodePipeline::Pipeline
-      Properties:
-         RoleArn: !GetAtt PipelineRole.Arn
-         ArtifactStore:
-            Type: S3
-            Location: !Ref PipelineBucket
-         RestartExecutionOnUpdate: false
-         Stages:
-            -
-               Name: Sources
-               Actions:
-                  -
-                     Name: webLine
-                     RunOrder: 1
-                     ActionTypeId:
-                        Category: Source
-                        Owner: AWS
-                        Provider: S3
-                        Version: '1'
-                     RoleArn: !GetAtt PipelineSourcesRole.Arn
-                     Configuration:
-                        S3Bucket: !Ref WebLineBucket
-                        S3ObjectKey: buildspecs.zip
-                     OutputArtifacts:
-                        -
-                           Name: webline
-                  -
-                     Name: Website
-                     RunOrder: 1
-                     ActionTypeId:
-                        Category: Source
-                        Owner: !FindInMap
-                           - Sources
-                           - !Ref SourceProvider
-                           - ActionOwner
-                        Provider: !FindInMap
-                           - Sources
-                           - !Ref SourceProvider
-                           - ActionProvider
-                        Version: !FindInMap
-                           - Sources
-                           - !Ref SourceProvider
-                           - ActionVersion
-                     Configuration:
-                        Fn::Transform:
-                           Name: AWS::Include
-                           Parameters:
-                              Bucket: !Ref WebsiteBucket
+      Properties: {
+         RoleArn: {
+            'Fn::GetAtt': [
+               PipelineRole,
+               Arn,
+            ],
+         },
+         ArtifactStore: {
+            Type: S3,
+            Location: {
+               Ref: PipelineBucket,
+            },
+         },
+         RestartExecutionOnUpdate: false,
+         Stages: [
+            {
+               Name: Sources,
+               Actions: [
+                  {
+                     Name: webpipe,
+                     RunOrder: 1,
+                     ActionTypeId: {
+                        Category: Source,
+                        Owner: AWS,
+                        Provider: S3,
+                        Version: '1',
+                     },
+                     RoleArn: {
+                        'Fn::GetAtt': [
+                           PipelineSourcesRole,
+                           Arn,
+                        ],
+                     },
+                     Configuration: {
+                        S3Bucket: {
+                           Ref: WebpipeBucket,
+                        },
+                        S3ObjectKey: buildspecs.zip,
+                     },
+                     OutputArtifacts: [
+                        {
+                           Name: webline,
+                        },
+                     ],
+                  },
+                  {
+                     Name: Website,
+                     RunOrder: 1,
+                     ActionTypeId: {
+                        Category: Source,
+                        Owner: {
+                           'Fn::FindInMap': [
+                              Sources,
+                              {
+                                 Ref: SourceProvider,
+                              },
+                              ActionOwner,
+                           ],
+                        },
+                        Provider: {
+                           'Fn::FindInMap': [
+                              Sources,
+                              {
+                                 Ref: SourceProvider,
+                              },
+                              ActionProvider,
+                           ],
+                        },
+                        Version: {
+                           'Fn::FindInMap': [
+                              Sources,
+                              {
+                                 Ref: SourceProvider,
+                              },
+                              ActionVersion,
+                           ],
+                        },
+                     },
+                     Configuration: {
+                        'Fn::Transform': {
+                           Name: 'AWS::Include',
+                           Parameters: {
+                              Bucket: {
+                                 Ref: WebsiteBucket,
+                              },
                               # This JSON file is generated by the source integration
                               # and contains the configuration needed by the relevant CodePipeline source provider.
-                              # For example, the GitHub integration would include the repository owner,
-                              # the repository's name itself, the branch name and the OAuth token.
-                              Key: !Sub '${Branch}/cfn/fragments/source/configuration.json'
-                     OutputArtifacts:
-                        -
-                           Name: sources
-            -
-               Name: Build
-               Actions:
-                  -
-                     Name: Website
-                     RunOrder: 1
-                     ActionTypeId:
-                        Category: Build
-                        Owner: AWS
-                        Provider: CodeBuild
-                        Version: '1'
-                     RoleArn: !GetAtt PipelineBuildWebsiteRole.Arn
-                     Configuration:
-                        ProjectName: !Ref BuildWebsiteProject
-                        PrimarySource: webline
-                     InputArtifacts:
-                        -
-                           Name: webline
-                        -
-                           Name: sources
-                     OutputArtifacts:
-                        -
-                           Name: website
-                  -
-                     Name: Stack
-                     RunOrder: 1
-                     ActionTypeId:
-                        Category: Build
-                        Owner: AWS
-                        Provider: CodeBuild
-                        Version: '1'
-                     RoleArn: !GetAtt PipelineBuildStackRole.Arn
-                     Configuration:
-                        ProjectName: !Ref BuildStackProject
-                     InputArtifacts:
-                        -
-                           Name: sources
-                     OutputArtifacts:
-                        -
-                           Name: stack
-            -
-               Name: Test
-               Actions:
-                  -
-                     Name: HTML
-                     RunOrder: 1
-                     ActionTypeId:
-                        Category: Test
-                        Owner: AWS
-                        Provider: CodeBuild
-                        Version: '1'
-                     RoleArn: !GetAtt PipelineValidateHTMLRole.Arn
-                     Configuration:
-                        ProjectName: !Ref ValidateHTMLProject
-                        PrimarySource: sources
-                     InputArtifacts:
-                        -
-                           Name: sources
-                        -
-                           Name: website
-            -
-               Name: Preview
-               Actions:
-                  -
-                     Name: Infrastructure
-                     RunOrder: 1
-                     ActionTypeId:
-                        Category: Deploy
-                        Owner: AWS
-                        Provider: CloudFormation
-                        Version: '1'
-                     RoleArn: !GetAtt PipelineDeployPreviewRole.Arn
-                     Configuration:
-                        ActionMode: REPLACE_ON_FAILURE
-                        Capabilities: CAPABILITY_IAM
-                        RoleArn: !GetAtt StackDeploymentRole.Arn
-                        StackName: !Sub 'www-${Project}-hosting-${Branch}'
-                        TemplatePath: stack::hosting.yaml
-                        TemplateConfiguration: stack::hosting.json
-                        OutputFileName: outputs.json
-                     InputArtifacts:
-                        -
-                           Name: stack
-                     OutputArtifacts:
-                        -
-                           Name: stack_preview
-                  -
-                     Name: Files
-                     RunOrder: 2
-                     ActionTypeId:
-                        Category: Deploy
-                        Owner: AWS
-                        Provider: S3
-                        Version: '1'
-                     RoleArn: !GetAtt PipelineDeployDataRole.Arn
-                     Configuration:
-                        BucketName: !GetParam
-                           - stack_preview
-                           - outputs.json
-                           - Bucket
-                        Extract: true
-                     InputArtifacts:
-                        -
-                           Name: website
-            -
-               Name: Promote
-               Actions:
-                  -
-                     Name: Files
-                     RunOrder: 1
-                     ActionTypeId:
-                        Category: Deploy
-                        Owner: AWS
-                        Provider: S3
-                        Version: '1'
-                     RoleArn: !GetAtt PipelineDeployDataRole.Arn
-                     Configuration:
-                        BucketName: !Ref WebsiteBucket
-                        Extract: true
-                        ObjectKey: !Ref Branch
-                     InputArtifacts:
-                        -
-                           Name: website
-                  -
-                     Name: Gate
-                     RunOrder: 2
-                     ActionTypeId:
-                        Category: Approval
-                        Owner: AWS
-                        Provider: Manual
-                        Version: '1'
-                  -
-                     Name: Promote
-                     RunOrder: 3
-                     ActionTypeId:
-                        Category: Deploy
-                        Owner: AWS
-                        Provider: CloudFormation
-                        Version: '1'
-                     RoleArn: !GetAtt PipelineDeployPromoteRole.Arn
-                     Configuration:
-                        ActionMode: CREATE_UPDATE
-                        Capabilities: CAPABILITY_IAM
-                        RoleArn: !GetAtt StackDeploymentRole.Arn
-                        StackName: !Sub 'www-${Project}-hosting'
-                        TemplatePath: stack::hosting.yaml
-                        TemplateConfiguration: stack::hosting.json
-                     InputArtifacts:
-                        -
-                           Name: stack
+                              Key: {
+                                 'Fn::Sub': '${Branch}/cfn/fragments/source/configuration.json',
+                              },
+                           },
+                        },
+                     },
+                     OutputArtifacts: [
+                        {
+                           Name: sources,
+                        },
+                     ],
+                  },
+               ],
+            },
+            {
+               'Fn::Transform': {
+                  Name: 'AWS::Include',
+                  Parameters: {
+                     Bucket: {
+                        Ref: WebsiteBucket,
+                     },
+                     Key: {
+                        'Fn::Sub': '${Branch}/cfn/fragments/pipeline/build.yaml',
+                     },
+                  },
+               },
+               Name: Build,
+#               Actions:
+#                  -
+#                     Name: Website
+#                     RunOrder: 1
+#                     ActionTypeId:
+#                        Category: Build
+#                        Owner: AWS
+#                        Provider: CodeBuild
+#                        Version: '1'
+#                     RoleArn: !GetAtt PipelineBuildWebsiteRole.Arn
+#                     Configuration:
+#                        ProjectName: !Ref BuildWebsiteProject
+#                        PrimarySource: webline
+#                     InputArtifacts:
+#                        -
+#                           Name: webline
+#                        -
+#                           Name: sources
+#                     OutputArtifacts:
+#                        -
+#                           Name: website
+#                  -
+#                     Name: Stack
+#                     RunOrder: 1
+#                     ActionTypeId:
+#                        Category: Build
+#                        Owner: AWS
+#                        Provider: CodeBuild
+#                        Version: '1'
+#                     RoleArn: !GetAtt PipelineBuildStackRole.Arn
+#                     Configuration:
+#                        ProjectName: !Ref BuildStackProject
+#                     InputArtifacts:
+#                        -
+#                           Name: sources
+#                     OutputArtifacts:
+#                        -
+#                           Name: stack
+            },
+            {
+               'Fn::Transform': {
+                  Name: 'AWS::Include',
+                  Parameters: {
+                     Bucket: {
+                        Ref: WebsiteBucket,
+                     },
+                     Key: {
+                        'Fn::Sub': '${Branch}/cfn/fragments/pipeline/test.yaml',
+                     },
+                  },
+               },
+               Name: Test,
+#               Actions:
+#                  -
+#                     Name: HTML
+#                     RunOrder: 1
+#                     ActionTypeId:
+#                        Category: Test
+#                        Owner: AWS
+#                        Provider: CodeBuild
+#                        Version: '1'
+#                     RoleArn: !GetAtt PipelineValidateHTMLRole.Arn
+#                     Configuration:
+#                        ProjectName: !Ref ValidateHTMLProject
+#                        PrimarySource: sources
+#                     InputArtifacts:
+#                        -
+#                           Name: sources
+#                        -
+#                           Name: website
+            },
+            {
+               Name: Preview,
+               Actions: [
+                  {
+                     Name: Infrastructure,
+                     RunOrder: 1,
+                     ActionTypeId: {
+                        Category: Deploy,
+                        Owner: AWS,
+                        Provider: CloudFormation,
+                        Version: '1',
+                     },
+                     RoleArn: {
+                        'Fn::GetAtt': [
+                           PipelineDeployPreviewRole,
+                           Arn,
+                        ],
+                     },
+                     Configuration: {
+                        ActionMode: REPLACE_ON_FAILURE,
+                        Capabilities: CAPABILITY_IAM,
+                        RoleArn: {
+                           'Fn::GetAtt': [
+                              StackDeploymentRole,
+                              Arn,
+                           ],
+                        },
+                        StackName: {
+                           'Fn::Sub': 'www-${Project}-hosting-${Branch}',
+                        },
+                        TemplatePath: 'stack::hosting.yaml',
+                        TemplateConfiguration: 'stack::hosting.json',
+                        OutputFileName: outputs.json,
+                     },
+                     InputArtifacts: [
+                        {
+                           Name: stack,
+                        },
+                     ],
+                     OutputArtifacts: [
+                        {
+                           Name: stack_preview,
+                        },
+                     ],
+                  },
+                  {
+                     Name: Files,
+                     RunOrder: 2,
+                     ActionTypeId: {
+                        Category: Deploy,
+                        Owner: AWS,
+                        Provider: S3,
+                        Version: '1',
+                     },
+                     RoleArn: {
+                        'Fn::GetAtt': [
+                           PipelineDeployDataRole,
+                           Arn,
+                        ],
+                     },
+                     Configuration: {
+                        BucketName: {
+                           'Fn::GetParam': [
+                              stack_preview,
+                              outputs.json,
+                              Bucket,
+                           ],
+                        },
+                        Extract: true,
+                     },
+                     InputArtifacts: [
+                        {
+                           Name: website,
+                        },
+                     ],
+                  },
+               ],
+            },
+            {
+               Name: Promote,
+               Actions: [
+                  {
+                     Name: Files,
+                     RunOrder: 1,
+                     ActionTypeId: {
+                        Category: Deploy,
+                        Owner: AWS,
+                        Provider: S3,
+                        Version: '1',
+                     },
+                     RoleArn: {
+                        'Fn::GetAtt': [
+                           PipelineDeployDataRole,
+                           Arn,
+                        ],
+                     },
+                     Configuration: {
+                        BucketName: {
+                           Ref: WebsiteBucket,
+                        },
+                        Extract: true,
+                        ObjectKey: {
+                           Ref: Branch,
+                        },
+                     },
+                     InputArtifacts: [
+                        {
+                           Name: website,
+                        },
+                     ],
+                  },
+                  {
+                     Name: Gate,
+                     RunOrder: 2,
+                     ActionTypeId: {
+                        Category: Approval,
+                        Owner: AWS,
+                        Provider: Manual,
+                        Version: '1',
+                     },
+                  },
+                  {
+                     Name: Promote,
+                     RunOrder: 3,
+                     ActionTypeId: {
+                        Category: Deploy,
+                        Owner: AWS,
+                        Provider: CloudFormation,
+                        Version: '1',
+                     },
+                     RoleArn: {
+                        'Fn::GetAtt': [
+                           PipelineDeployPromoteRole,
+                           Arn,
+                        ],
+                     },
+                     Configuration: {
+                        ActionMode: CREATE_UPDATE,
+                        Capabilities: CAPABILITY_IAM,
+                        RoleArn: {
+                           'Fn::GetAtt': [
+                              StackDeploymentRole,
+                              Arn,
+                           ],
+                        },
+                        StackName: {
+                           'Fn::Sub': 'www-${Project}-hosting',
+                        },
+                        TemplatePath: 'stack::hosting.yaml',
+                        TemplateConfiguration: 'stack::hosting.json',
+                     },
+                     InputArtifacts: [
+                        {
+                           Name: stack,
+                        },
+                     ],
+                  },
+               ],
+            },
+         ],
+      }

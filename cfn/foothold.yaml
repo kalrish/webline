@@ -2,46 +2,82 @@
 AWSTemplateFormatVersion: 2010-09-09
 
 
-Description: 'Foothold for webLine source integrations.'
+Description: Foothold for webpipe source integrations.
 
 
 Metadata:
    AWS::CloudFormation::Interface:
       ParameterGroups:
          -
-            Label: webLine
+            Label: General
             Parameters:
-               - Id
-               - WebLineAccount
+               - IntegrationAccountId
+         -
+            Label: Customer
+            Parameters:
+               - CustomerToken
 
       ParameterLabels:
-         Id:
-            default: ID
-         WebLineAccount:
-            default: webLine account
+         CustomerToken:
+            default: Token
+         IntegrationAccountId:
+            default: AWS account
 
 
 Parameters:
-   Id:
-      Description: 'ID assigned to you when you installed the webLine source integration.'
+   CustomerToken:
+      Description: Token assigned to you by the webpipe source integration.
       Type: String
       NoEcho: true
-   WebLineAccount:
-      Description: 'ID of the AWS account that hosts the webLine source integration.'
+
+   IntegrationAccountId:
+      Description: ID of the AWS account that hosts the webpipe source integration.
       Type: String
+      AllowedPattern: '^\d{12}$'
+      MinLength: 12
+      MaxLength: 12
+      ConstraintDescription: must be a valid AWS account ID
 
 
 Resources:
+   # webline deploys a CloudFormation stack.
+   # The stack might contain IAM roles.
+   # If it creates IAM roles with wide permissions, we have privilege escalation.
+   # Thus, we only let CloudFormation create roles
+   # if they have a permissions boundary (the policy below).
+   PermissionsBoundary:
+      Type: AWS::IAM::ManagedPolicy
+      Properties: {
+         Description: 'Permissions boundary for IAM roles of webpipe pipelines.',
+         PolicyDocument: {
+            Version: 2012-10-17,
+            Statement: [
+               {
+                  # Pipelines shouldn't need to use some services (listed below)
+                  Sid: restrict,
+                  Action: [
+                     'aws-portal:*',
+                     'ec2:*',
+                     'iam:*',
+                  ],
+                  Resource: '*',
+                  Effect: Deny,
+               },
+            ],
+         },
+      }
+
    AppRole:
       Type: AWS::IAM::Role
       Properties: {
+         Path: /webpipe/foothold/,
          AssumeRolePolicyDocument: {
             Version: 2012-10-17,
             Statement: [
                {
                   Principal: {
                      AWS: {
-                        Ref: WebLineAccount,
+                        Ref: IntegrationAccountId,
                      },
                   },
                   Action: [
@@ -50,7 +86,7 @@ Resources:
                   Condition: {
                      StringEquals: {
                         'sts:ExternalId': {
-                           Ref: Id,
+                           Ref: CustomerToken,
                         },
                      },
                   },
@@ -73,7 +109,7 @@ Resources:
                         ],
                         Resource: [
                            {
-                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webline-pipeline-*/*',
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-pipeline-*/*',
                            },
                         ],
                         Effect: Allow,
@@ -90,6 +126,13 @@ Resources:
                               ],
                            },
                         ],
+                        Condition: {
+                           StringEquals: {
+                              'iam:PassedToService': {
+                                 Fn::Sub: 'cloudformation.${AWS::URLSuffix}',
+                              },
+                           },
+                        },
                         Effect: Allow,
                      },
                   ],
@@ -126,7 +169,7 @@ Resources:
                         ],
                         Resource: [
                            {
-                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webline*',
+                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webpipe*',
                            },
                         ],
                         Effect: Allow,
@@ -134,9 +177,10 @@ Resources:
                   ],
                },
             },
-         ]
+         ],
+      }
 
-   # To deploy a webLine pipeline, an S3 bucket
+   # To deploy a webpipe pipeline, an S3 bucket
    # containing certain files.
    BridgeBucket:
       Type: AWS::S3::Bucket
@@ -148,6 +192,7 @@ Resources:
    CloudFormationRole:
       Type: AWS::IAM::Role
       Properties: {
+         Path: /webpipe/foothold/,
          AssumeRolePolicyDocument: {
             Version: 2012-10-17,
             Statement: [
@@ -180,7 +225,7 @@ Resources:
                         ],
                         Resource: [
                            {
-                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webline*',
+                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webpipe*',
                            },
                         ],
                         Effect: Allow,
@@ -192,27 +237,47 @@ Resources:
                         ],
                         Resource: [
                            {
-                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webline*',
+                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webpipe*',
                            },
                         ],
                         Effect: Allow,
                      },
                      {
-                        Sid: iam,
+                        # IAM permissions that may be restricted
+                        # by permission boundaries
+                        Sid: iam-bounded,
                         Action: [
                            'iam:AttachRolePolicy',
                            'iam:CreateRole',
-                           'iam:DeleteRole',
-                           'iam:DeleteRolePermissionsBoundary',
                            'iam:DeleteRolePolicy',
                            'iam:DetachRolePolicy',
+                           'iam:PutRolePolicy',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/webpipe/pipeline/*',
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'iam:PermissionsBoundary': {
+                                 Ref: PermissionsBoundary,
+                              },
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                     {
+                        # IAM permissions that may NOT be restricted
+                        # by permission boundaries
+                        Sid: iam-unbounded,
+                        Action: [
+                           'iam:DeleteRole',
                            'iam:GetRole',
                            'iam:GetRolePolicy',
                            'iam:ListAttachedRolePolicies',
                            'iam:ListRolePolicies',
                            'iam:ListRoleTags',
-                           'iam:PutRolePermissionsBoundary',
-                           'iam:PutRolePolicy',
                            'iam:TagRole',
                            'iam:UntagRole',
                            'iam:UpdateAssumeRolePolicy',
@@ -221,7 +286,7 @@ Resources:
                         ],
                         Resource: [
                            {
-                              'Fn::Sub': 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/webline-pipeline-*',
+                              'Fn::Sub': 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/webpipe/pipeline/*',
                            },
                         ],
                         Effect: Allow,
