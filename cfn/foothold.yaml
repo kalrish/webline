@@ -180,13 +180,6 @@ Resources:
          ],
       }
 
-   # To deploy a webpipe pipeline, an S3 bucket
-   # containing certain files.
-   BridgeBucket:
-      Type: AWS::S3::Bucket
-      Properties: {
-      }
-
    # This IAM role lets CloudFormation create and delete
    # the webpipe pipeline stack.
    CloudFormationRole:
