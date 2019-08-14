@@ -261,7 +261,7 @@ Resources:
                         Effect: Allow,
                      },
                      {
-                        # IAM permissions that may NOT be restricted
+                        # IAM permissions that cannot be restricted
                         # by permission boundaries
                         Sid: iam-unbounded,
                         Action: [
