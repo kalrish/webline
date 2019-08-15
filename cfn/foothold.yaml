@@ -292,11 +292,11 @@ Resources:
 
 
 Outputs:
-   Role: !If
+   Role:
       Description: 'Name of the IAM role.'
       Value:
          Ref: Role
-   RoleArn: !If
+   RoleArn:
       Description: 'ARN of the IAM role.'
       Value:
          Fn::GetAtt:
