@@ -2,7 +2,7 @@
 AWSTemplateFormatVersion: 2010-09-09
 
 
-Description: 'Public webpipe artifacts.'
+Description: 'Public repository for webpipe artifacts.'
 
 
 Resources:
