@@ -53,8 +53,7 @@ Resources:
             Version: 2012-10-17,
             Statement: [
                {
-                  # Pipelines shouldn't need to use some services (listed below)
-                  Sid: restrict,
+                  Sid: Restrict,
                   Action: [
                      'aws-portal:*',
                      'ec2:*',
@@ -211,7 +210,7 @@ Resources:
                   Version: 2012-10-17,
                   Statement: [
                      {
-                        Sid: codepipeline,
+                        Sid: CodePipeline,
                         Action: [
                            'codepipeline:CreatePipeline',
                            'codepipeline:DeletePipeline',
@@ -224,7 +223,7 @@ Resources:
                         Effect: Allow,
                      },
                      {
-                        Sid: codebuild,
+                        Sid: CodeBuild,
                         Action: [
                            'codebuild:CreateProject',
                         ],
@@ -238,7 +237,7 @@ Resources:
                      {
                         # IAM permissions that may be restricted
                         # by permission boundaries
-                        Sid: iam-bounded,
+                        Sid: BoundedIAM,
                         Action: [
                            'iam:AttachRolePolicy',
                            'iam:CreateRole',
@@ -263,7 +262,7 @@ Resources:
                      {
                         # IAM permissions that cannot be restricted
                         # by permission boundaries
-                        Sid: iam-unbounded,
+                        Sid: UnboundedIAM,
                         Action: [
                            'iam:DeleteRole',
                            'iam:GetRole',
@@ -280,6 +279,40 @@ Resources:
                         Resource: [
                            {
                               'Fn::Sub': 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/webpipe/pipeline/*',
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: CloudWatchEvents,
+                        Action: [
+                           'events:PutRule',
+                           'events:DeleteRule',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:events:*:${AWS::AccountId}:webpipe*',
+                           },
+                        ],
+                        Effect: Allow,
+                     },
+                  ],
+               },
+            },
+            {
+               PolicyName: notification,
+               PolicyDocument: {
+                  Version: 2012-10-17,
+                  Statement: [
+                     {
+                        Action: [
+                           'sns:Publish',
+                        ],
+                        # NotResource to prevent the integration from publishing to topics
+                        # in the customer's account.
+                        NotResource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:sns:*:${AWS::AccountId}:*',
                            },
                         ],
                         Effect: Allow,

@@ -530,3 +530,49 @@ Resources:
             },
          ],
       }
+
+   PipelineEventsRule:
+      Type: AWS::Events::Rule
+      Properties: {
+         State: ENABLED,
+         RoleArn: {
+            'Fn::GetAtt': [
+               PipelineEventsRole,
+               Arn,
+            ],
+         },
+         EventPattern: {
+            region: {
+               Ref: 'AWS::Region',
+            },
+            account: {
+               Ref: 'AWS::AccountId',
+            },
+            source: [
+               aws.codepipeline,
+            ],
+            resources: [
+               {
+                  'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:${AWS::Region}:${AWS::AccountId}:${Pipeline}',
+               },
+            ],
+            detail-type: [
+               CodePipeline Pipeline Execution State Change,
+            ],
+            detail: {
+               pipeline: [
+                  {
+                     Ref: Pipeline,
+                  },
+               ],
+            },
+         },
+         Targets: [
+            {
+               Id: notifications,
+               Arn: {
+                  Ref: PipelineNotificationsTopicArn,
+               },
+            },
+         ],
+      }
