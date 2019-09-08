@@ -40,11 +40,18 @@ Parameters:
 
 
 Resources:
+   # The deployment of a webpipe pipeline requires a bucket
+   # containing certain files.
+   BridgeBucket:
+      Type: AWS::S3::Bucket
+      Properties: {
+      }
+
    # webline deploys a CloudFormation stack.
    # The stack might contain IAM roles.
    # If it creates IAM roles with wide permissions, we have privilege escalation.
    # Thus, we only let CloudFormation create roles
-   # if they have a permissions boundary (the policy below).
+   # if they are restricted by a permissions boundary (the policy below).
    PermissionsBoundary:
       Type: AWS::IAM::ManagedPolicy
       Properties: {
