@@ -107,10 +107,40 @@ Resources:
                   Version: 2012-10-17,
                   Statement: [
                      {
+                        Sid: Create,
                         Action: [
                            'cloudformation:CreateStack',
-                           'cloudformation:DeleteStack',
-                           'cloudformation:DescribeStacks',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-pipeline-*/*',
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:RequestTag/Manager': webpipe,
+                              'cloudformation:RoleArn': {
+                                 'Fn::GetAtt': [
+                                    CloudFormationRole,
+                                    Arn,
+                                 ],
+                              },
+                              'cloudformation:TemplateUrl': {
+                                 'Fn::Sub': 'https://${WebpipeBucket}.s3.${AWS::URLSuffix}/cfn/pipeline.yaml',
+                              },
+                           },
+                           'ForAllValues:StringLike': {
+                              'cloudformation:ResourceTypes': [
+                                 'AWS::CodePipeline::Project',
+                                 'AWS::S3::Bucket',
+                              ],
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: Update,
+                        Action: [
                            'cloudformation:UpdateStack',
                         ],
                         Resource: [
@@ -118,9 +148,71 @@ Resources:
                               'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-pipeline-*/*',
                            },
                         ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:RequestTag/Manager': webpipe,
+                              'aws:ResourceTag/Manager': webpipe,
+                              'cloudformation:RoleArn': {
+                                 'Fn::GetAtt': [
+                                    CloudFormationRole,
+                                    Arn,
+                                 ],
+                              },
+                              'cloudformation:TemplateUrl': {
+                                 'Fn::Sub': 'https://${WebpipeBucket}.s3.${AWS::URLSuffix}/cfn/pipeline.yaml',
+                              },
+                           },
+                           'ForAllValues:StringLike': {
+                              'cloudformation:ResourceTypes': [
+                                 'AWS::CodePipeline::Project',
+                                 'AWS::S3::Bucket',
+                              ],
+                           },
+                        },
                         Effect: Allow,
                      },
                      {
+                        Sid: Monitor,
+                        Action: [
+                           'cloudformation:DescribeStacks',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-pipeline-*/*',
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:ResourceTag/Manager': webpipe,
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: Delete,
+                        Action: [
+                           'cloudformation:DeleteStack',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-pipeline-*/*',
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:ResourceTag/Manager': webpipe,
+                              'cloudformation:RoleArn': {
+                                 'Fn::GetAtt': [
+                                    CloudFormationRole,
+                                    Arn,
+                                 ],
+                              },
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: Allow,
                         Action: [
                            'iam:PassRole',
                         ],
@@ -135,7 +227,7 @@ Resources:
                         Condition: {
                            StringEquals: {
                               'iam:PassedToService': {
-                                 Fn::Sub: 'cloudformation.${AWS::URLSuffix}',
+                                 'Fn::Sub': 'cloudformation.${AWS::URLSuffix}',
                               },
                            },
                         },
@@ -151,7 +243,6 @@ Resources:
                   Statement: [
                      {
                         Action: [
-                           's3:DeleteObject',
                            's3:PutObject',
                         ],
                         Resource: [
@@ -170,14 +261,37 @@ Resources:
                   Version: 2012-10-17,
                   Statement: [
                      {
+                        Sid: Trigger,
                         Action: [
                            'codepipeline:StartPipelineExecution',
                         ],
                         Resource: [
                            {
-                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:webpipe*',
+                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:*',
                            },
                         ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:ResourceTag/Manager': webpipe,
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: Promote,
+                        Action: [
+                           'codepipeline:PutApprovalResult',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:codepipeline:*:${AWS::AccountId}:*/*/*',
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:ResourceTag/Manager': webpipe,
+                           },
+                        },
                         Effect: Allow,
                      },
                   ],
@@ -307,11 +421,123 @@ Resources:
                },
             },
             {
+               PolicyName: extra,
+               PolicyDocument: {
+                  Version: 2012-10-17,
+                  Statement: [
+                     {
+                        Sid: Create,
+                        Action: [
+                           'cloudformation:CreateStack',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-pipeline-*/*',
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:RequestTag/Manager': webpipe,
+                              'cloudformation:RoleArn': {
+                                 'Fn::GetAtt': [
+                                    CloudFormationRole,
+                                    Arn,
+                                 ],
+                              },
+                              'cloudformation:TemplateUrl': {
+                                 'Fn::Sub': 'https://${WebpipeBucket}.s3.${AWS::URLSuffix}/cfn/pipeline.yaml',
+                              },
+                           },
+                           'ForAllValues:StringLike': {
+                              'cloudformation:ResourceTypes': [
+                                 'AWS::CodeBuild::Project',
+                              ],
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: Update,
+                        Action: [
+                           'cloudformation:UpdateStack',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-pipeline-*/*',
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:RequestTag/Manager': webpipe,
+                              'aws:ResourceTag/Manager': webpipe,
+                              'cloudformation:RoleArn': {
+                                 'Fn::GetAtt': [
+                                    CloudFormationRole,
+                                    Arn,
+                                 ],
+                              },
+                              'cloudformation:TemplateUrl': {
+                                 'Fn::Sub': 'https://${WebpipeBucket}.s3.${AWS::URLSuffix}/cfn/pipeline.yaml',
+                              },
+                           },
+                           'ForAllValues:StringLike': {
+                              'cloudformation:ResourceTypes': [
+                                 'AWS::CodeBuild::Project',
+                              ],
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: Monitor,
+                        Action: [
+                           'cloudformation:DescribeStacks',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-pipeline-*/*',
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:ResourceTag/Manager': webpipe,
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                     {
+                        Sid: Delete,
+                        Action: [
+                           'cloudformation:DeleteStack',
+                        ],
+                        Resource: [
+                           {
+                              'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/webpipe-pipeline-*/*',
+                           },
+                        ],
+                        Condition: {
+                           StringEquals: {
+                              'aws:ResourceTag/Manager': webpipe,
+                              'cloudformation:RoleArn': {
+                                 'Fn::GetAtt': [
+                                    CloudFormationRole,
+                                    Arn,
+                                 ],
+                              },
+                           },
+                        },
+                        Effect: Allow,
+                     },
+                  ],
+               },
+            },
+            {
                PolicyName: notification,
                PolicyDocument: {
                   Version: 2012-10-17,
                   Statement: [
                      {
+                        Sid: Publish,
                         Action: [
                            'sns:Publish',
                         ],
