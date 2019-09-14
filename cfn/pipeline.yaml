@@ -557,7 +557,9 @@ Resources:
                },
             ],
             detail-type: [
+               CodePipeline Action Execution State Change,
                CodePipeline Pipeline Execution State Change,
+               CodePipeline Stage Execution State Change,
             ],
             detail: {
                pipeline: [
@@ -572,6 +574,12 @@ Resources:
                Id: notifications,
                Arn: {
                   Ref: PipelineNotificationsTopicArn,
+               },
+            },
+            {
+               Id: forwarding,
+               Arn: {
+                  'Fn::Sub': 'arn:${AWS::Partition}:events:${AWS::Region}:${CoreAccountId}:event-bus/default',
                },
             },
          ],

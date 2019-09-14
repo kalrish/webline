@@ -1,0 +1,66 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Description: Pipeline stack notifications topic
+
+
+Resources:
+   # When a new branch is created, a new pipeline must be deployed
+   # using CloudFormation. The integration has CloudFormation send
+   # status notifications to this SNS topic.
+   Topic:
+      Type: AWS::SNS::Topic
+      Properties: {
+      }
+
+   TopicPolicy:
+      Type: AWS::SNS::TopicPolicy
+      Properties: {
+         Topics: [
+            {
+               Ref: Topic,
+            },
+         ],
+         PolicyDocument: {
+            Statement: [
+               {
+                  Principal: '*',
+                  Action: [
+                     'sns:Publish',
+                  ],
+                  Resource: [
+                     {
+                        'Fn::GetAtt': [
+                           Topic,
+                           Arn,
+                        ],
+                     },
+                  ],
+                  Condition: {
+                     # Allow messages only from CloudFormation stacks
+                     ArnLike: {
+                        'aws:SourceArn': {
+                           'Fn::Sub': 'arn:${AWS::Partition}:cloudformation:*:*:stack/*',
+                        },
+                     },
+                     # Only customer stacks should send messages to this topic,
+                     # so the topic's account should be denied permissions.
+                     StringNotEquals: {
+                        'aws:SourceAccount': {
+                           Ref: 'AWS::AccountId',
+                        },
+                     },
+                  },
+                  Effect: Allow,
+               },
+            ],
+         },
+      }
+
+
+Outputs:
+   Topic:
+      Description: Name of the SNS topic.
+      Value:
+         Ref: Topic
