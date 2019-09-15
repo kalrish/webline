@@ -1,0 +1,23 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+
+
+Description: pipeduct macro
+
+
+Parameters:
+   FunctionArn:
+      Description: 'ARN of the Lambda function, function version or function alias to invoke.'
+      Type: String
+
+
+Resources:
+   Macro:
+      Type: AWS::CloudFormation::Macro
+      Properties: {
+         Name: pipeduct,
+         Description: pipeduct macro,
+         FunctionName: {
+            Ref: FunctionArn,
+         },
+      }
