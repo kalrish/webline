@@ -1,3 +1,6 @@
+# Manages pipelines on behalf of integrations
+
+
 import boto3
 
 
@@ -62,125 +65,88 @@ def get_stack_status(branch, repository, session):
     return return_value
 
 
-def deploy_stack(bucket, cloudformation_role, topic_arn):
-client = boto3.client(
-    'cloudformation',
-)
-
-stack_name = f'pipeduct-{owner}-{repository}-{branch}'
-template_url = f'https://{bucket}.s3.amazonaws.com/v1/cfn/pipeline.yaml'
-
-response = client.create_change_set(
-    stack_name=stack_name,
-    template_url=template_url,
-    parameters=[
-        {
-            parameter_key='WebpipeBucket',
-            parameter_value=bucket,
-        },
-        {
-            parameter_key='Branch',
-            parameter_value=branch,
-        },
-        {
-            parameter_key='SourceProvider',
-            parameter_value='github',
-        },
-    ],
-    capabilities=[
-        'CAPABILITY_IAM',
-    ],
-    role_arn=cloudformation_role,
-    notification_arns=[
-        topic_arn,
-    ],
-    tags=[
-        {
-            key='GitHub-Owner',
-            value=owner,
-        },
-        {
-            key='GitHub-Repo',
-            value=repo,
-        },
-    ],
-)
-
-response = client.execute_change_set(
-)
-
-return
-
-
 def enqueue_stack_update():
 return
 
 
-def main(config):
-app_role = config['app_role']
-cloudformation_role = config['cloudformation_role']
+def main(action, config):
+    app_role = config['app_role']
+    cloudformation_role = config['cloudformation_role']
 
-foreign_session = create_session_from_role(
-    app_role,
-)
-
-stack_status = get_stack_status(
-    branch=branch,
-    repository=repository,
-    session=foreign_session,
-)
-
-status = None
-
-if stack_status:
-    # The stack exists
-
-    stack_must_be_recreated = stack_status == 'CREATE_FAILED' or stack_status == 'DELETE_COMPLETE'
-    stack_may_be_updated = stack_status == 'CREATE_COMPLETE' or stack_status == 'UPDATE_COMPLETE'
-
-    if stack_must_be_recreated:
-        delete_stack(
-        )
-
-        enqueue_stack_update(
-            config,
-        )
-
-        status = 'RECREATING'
-    elif stack_may_be_updated:
-        deploy_stack(
-            branch=branch,
-            bucket=webpipe_bucket,
-            owner=owner,
-            repository=repository,
-            role=pipeline_stack_deployment_role,
-            sns_arn=pipeline_stack_notification_topic,
-        )
-
-        status = 'UPDATING'
-    else:
-        # somebody was nasty and pushed too quick
-        # so the stack is still being updated (or created)
-        # we can only wait until the operation is complete
-        # then issue an update / create a changeset
-
-        assert(
-            stack_status == 'CREATE_IN_PROGRESS' or stack_status == 'UPDATE_IN_PROGRESS',
-        )
-
-        enqueue_stack_update(
-                config,
-            )
-
-            status = 'QUEUED'
-
-    else:
-        # The stack doesn't exist
-
-        status = 'CREATING'
-
-    trigger_pipeline(
+    foreign_session = create_session_from_role(
+        app_role,
     )
+
+    cloudformation = foreign_session.client(
+        'cloudformation',
+    )
+
+    stack_name = f'pipeduct-{owner}-{repository}-{identifier_from_integration}'
+
+    if action == 'create':
+        parameters = {
+            'StackName': stack_name,
+            'TemplateURL': f'https://{bucket}.s3.amazonaws.com/v1/cfn/pipeline.yaml',
+            'Parameters': [
+                {
+                    'ParameterKey': 'WebpipeBucket',
+                    'ParameterValue': bucket,
+                },
+                {
+                    'ParameterKey': 'Branch',
+                    'ParameterValue': branch,
+                },
+                {
+                    'ParameterKey': 'SourceProvider',
+                    'ParameterValue': 'github',
+                },
+            ],
+            'Capabilities': [
+                'CAPABILITY_IAM',
+            ],
+            'RoleARN': cloudformation_role,
+            'NotificationARNs': [
+                topic_arn,
+            ],
+            'OnFailure': 'DELETE',
+            'Tags': [
+                {
+                    'Key': 'GitHub-Owner',
+                    'Value': owner,
+                },
+                {
+                    'Key': 'GitHub-Repo',
+                    'Value': repo,
+                },
+            ],
+        }
+
+        status = None
+
+        # FIXME: handle CREATE_FAILED ?
+
+        try:
+            cloudformation.create_stack(
+                **parameters,
+            )
+        except AlreadyExists:
+            try:
+                cloudformation.update_stack(
+                    **parameters,
+                )
+            except UpdateInProgress:
+                enqueue_stack_update(
+                )
+
+                status = 'PENDING'
+            else:
+                status = 'UPDATING'
+        else:
+            status = 'CREATING'
+    else:
+        cloudformation.delete_stack(
+            StackName=stack_name,
+        )
 
     return status
 
@@ -189,6 +155,7 @@ def handler(events, context):
     config = events['Records'][0]
 
     status = main(
+        action,
         config,
     )
 

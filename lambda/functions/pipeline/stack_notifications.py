@@ -5,13 +5,17 @@ import boto3
 import re
 
 
+variable_value_pattern = re.compile(
+    '^([^=]+)=(.*)$',
+)
+
+
 def extract_variables(message):
     variables = {}
 
     for line in message.lines:
-        # FIXME: compile regex
-
-        match = re.search(
+        match = variable_value_pattern.search(
+            line,
         )
 
         variable = match[1]
@@ -20,6 +24,20 @@ def extract_variables(message):
         variables[variable] = value
 
     return variables
+
+
+def trigger_pipeline():
+    codepipeline = foreign_session.client(
+        'codepipeline',
+    )
+
+    pipeline_name = stack_outputs['Pipeline']
+
+    codepipeline.start_pipeline_execution(
+        PipelineName=pipeline_name,
+    )
+
+    return
 
 
 def notify_integration():
@@ -55,26 +73,51 @@ def process_message(message):
     if message_relates_to_stack_itself:
         resource_status = variables['ResourceStatus']
 
+        if resource_status == 'CREATE_COMPLETE':
+            status = 'CREATED'
+
+            # When the stack is created, the pipeline will run automatically,
+            # so it's not necessary to trigger it manually.
+        elif resource_status == 'UPDATE_COMPLETE':
+            # Manual pipeline triggers are necessary after stack updates.
+
+            trigger_pipeline(
+            )
+
+            status = 'UPDATED'
+        else:
+            status = 'FAILED'
+
         notify_integration(
           stack,
-          resource_status,
+          status,
         )
 
     return
 
 
-def main(records):
+def process_record(record):
+    obj = record['Sns']
+    subject = obj['Subject']
+
+    if subject == 'AWS CloudFormation Notification':
+        message = obj['Message']
+        process_message(
+            message,
+        )
+    else:
+        # forged message!
+
+        # TODO: Submit metric to CloudWatch (about forged messages)
+
+    return
+
+
+def process_records(records):
     for record in records:
-        obj = record['Sns']
-        subject = obj['Subject']
-
-        if subject == 'AWS CloudFormation Notification':
-            message = obj['Message']
-            process_message(message)
-        else:
-            # forged message!
-
-            # TODO: Submit metric to CloudWatch (about forged messages)
+        process_record(
+            record,
+        )
 
     return
 
@@ -82,7 +125,12 @@ def main(records):
 def handler(event, context):
     records = event['Records']
 
-    main(records)
+    record = records[0]
+
+    process_record(
+        record,
+    )
+    #main(records)
 
     response = {
     }
