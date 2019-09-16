@@ -13,7 +13,9 @@ variable_value_pattern = re.compile(
 def extract_variables(message):
     variables = {}
 
-    for line in message.lines:
+    lines = message.splitlines()
+
+    for line in lines:
         match = variable_value_pattern.search(
             line,
         )
@@ -79,12 +81,12 @@ def process_message(message):
             # When the stack is created, the pipeline will run automatically,
             # so it's not necessary to trigger it manually.
         elif resource_status == 'UPDATE_COMPLETE':
+            status = 'UPDATED'
+
             # Manual pipeline triggers are necessary after stack updates.
 
             trigger_pipeline(
             )
-
-            status = 'UPDATED'
         else:
             status = 'FAILED'
 

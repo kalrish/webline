@@ -2,6 +2,7 @@
 
 
 import boto3
+import botocore
 
 
 def assume_role(role_arn):
@@ -69,7 +70,13 @@ def enqueue_stack_update():
 return
 
 
-def main(action, config):
+def main(config):
+    config_data = parameters['config']
+
+    config = yaml.load(
+        config_data,
+    )
+
     app_role = config['app_role']
     cloudformation_role = config['cloudformation_role']
 
@@ -81,82 +88,121 @@ def main(action, config):
         'cloudformation',
     )
 
+    action = parameters['action']
+
+    stack_name_suffix = config['stack']['name_suffix']
+
     stack_name = f'pipeduct-{owner}-{repository}-{identifier_from_integration}'
 
-    if action == 'create':
-        parameters = {
-            'StackName': stack_name,
-            'TemplateURL': f'https://{bucket}.s3.amazonaws.com/v1/cfn/pipeline.yaml',
-            'Parameters': [
-                {
-                    'ParameterKey': 'WebpipeBucket',
-                    'ParameterValue': bucket,
-                },
-                {
-                    'ParameterKey': 'Branch',
-                    'ParameterValue': branch,
-                },
-                {
-                    'ParameterKey': 'SourceProvider',
-                    'ParameterValue': 'github',
-                },
-            ],
-            'Capabilities': [
-                'CAPABILITY_IAM',
-            ],
-            'RoleARN': cloudformation_role,
-            'NotificationARNs': [
-                topic_arn,
-            ],
-            'OnFailure': 'DELETE',
-            'Tags': [
-                {
-                    'Key': 'GitHub-Owner',
-                    'Value': owner,
-                },
-                {
-                    'Key': 'GitHub-Repo',
-                    'Value': repo,
-                },
-            ],
+    try:
+        if action == 'create':
+            template_url = f'https://{bucket}.s3.amazonaws.com/v1/cfn/pipeline.yaml'
+
+            try:
+                cloudformation.validate_template(
+                    TemplateURL=template_url,
+                )
+            except ClientError:
+                status = 'INVALID'
+            else:
+                parameters = {
+                    'StackName': stack_name,
+                    'TemplateURL': template_url,
+                    'Parameters': [
+                        {
+                            'ParameterKey': 'WebpipeBucket',
+                            'ParameterValue': bucket,
+                        },
+                        {
+                            'ParameterKey': 'Branch',
+                            'ParameterValue': branch,
+                        },
+                        {
+                            'ParameterKey': 'SourceProvider',
+                            'ParameterValue': 'github',
+                        },
+                    ],
+                    'Capabilities': [
+                        'CAPABILITY_IAM',
+                    ],
+                    'RoleARN': cloudformation_role,
+                    'NotificationARNs': [
+                        topic_arn,
+                    ],
+                    'OnFailure': 'DELETE',
+                    'Tags': [
+                        {
+                            'Key': 'GitHub-Owner',
+                            'Value': owner,
+                        },
+                        {
+                            'Key': 'GitHub-Repo',
+                            'Value': repo,
+                        },
+                    ],
+                }
+
+                status = None
+
+                # FIXME: handle CREATE_FAILED ?
+
+                try:
+                    cloudformation.create_stack(
+                        **parameters,
+                    )
+                except cloudformation.exceptions.AlreadyExists:
+                    try:
+                        cloudformation.update_stack(
+                            **parameters,
+                        )
+                    except UpdateInProgress:
+                        enqueue_stack_update(
+                        )
+
+                        status = 'PENDING'
+                    else:
+                        status = 'UPDATING'
+                else:
+                    status = 'CREATING'
+        else:
+            assert(
+                action == 'delete',
+            )
+
+            try:
+                cloudformation.delete_stack(
+                    StackName=stack_name,
+                )
+            except ClientError:
+                status = 'Couldn"t delete'
+            else:
+                status = 'DELETING'
+    except cloudformation.exceptions.AccessDeniedException:
+        status = 'DENIED'
+    except botocore.exceptions.ClientError as e:
+        status = 'FAILED'
+
+        error_code = e.response['Error']['Code']
+        error_message = e.response['Error']['Message']
+        request_id = e.response['ResponseMetadata']['RequestId']
+
+        extra_status = {
+            'code': error_code,
+            'message': error_message,
+            'request_id': request_id,
         }
 
-        status = None
+    response = {
+        'status': status,
+        'extra': extra_status,
+    }
 
-        # FIXME: handle CREATE_FAILED ?
-
-        try:
-            cloudformation.create_stack(
-                **parameters,
-            )
-        except AlreadyExists:
-            try:
-                cloudformation.update_stack(
-                    **parameters,
-                )
-            except UpdateInProgress:
-                enqueue_stack_update(
-                )
-
-                status = 'PENDING'
-            else:
-                status = 'UPDATING'
-        else:
-            status = 'CREATING'
-    else:
-        cloudformation.delete_stack(
-            StackName=stack_name,
-        )
-
-    return status
+    return response
 
 
-def handler(events, context):
-    config = events['Records'][0]
-
+def handler(event, context):
     status = main(
-        action,
-        config,
+        event,
     )
 
     return status
