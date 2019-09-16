@@ -71,12 +71,6 @@ return
 
 
 def main(config):
-    config_data = parameters['config']
-
-    config = yaml.load(
-        config_data,
-    )
-
     app_role = config['app_role']
     cloudformation_role = config['cloudformation_role']
 
