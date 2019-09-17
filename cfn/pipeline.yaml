@@ -50,11 +50,7 @@ Resources:
             Statement: [
                {
                   Principal: {
-                     Service: [
-                        {
-                           'Fn::Sub': 'codepipeline.${AWS::URLSuffix}',
-                        },
-                     ],
+                     Service: codepipeline.amazonaws.com,
                   },
                   Action: [
                      'sts:AssumeRole',
@@ -77,11 +73,7 @@ Resources:
             Statement: [
                {
                   Principal: {
-                     Service: [
-                        {
-                           'Fn::Sub': 'cloudformation.${AWS::URLSuffix}',
-                        },
-                     ],
+                     Service: cloudformation.amazonaws.com,
                   },
                   Action: [
                      'sts:AssumeRole',
@@ -156,9 +148,7 @@ Resources:
                         ],
                         Condition: {
                            StringEquals: {
-                              'iam:PassedToService': {
-                                 Fn::Sub: 'cloudformation.${AWS::URLSuffix}',
-                              },
+                              'iam:PassedToService': cloudformation.amazonaws.com,
                            },
                         },
                         Effect: Allow,
@@ -173,7 +163,7 @@ Resources:
       Type: AWS::CloudFormation::Stack
       Properties: {
          TemplateURL: {
-            'Fn::Sub': 'https://${Bucket}.s3.amazonaws.com/${Branch}/resources.yaml',
+            'Fn::Sub': 'https://${Bucket}.s3.${AWS::URLSuffix}/${Branch}/resources.yaml',
          },
          Parameters: {
             PermissionsBoundaryArn: {

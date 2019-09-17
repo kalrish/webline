@@ -226,9 +226,7 @@ Resources:
                         ],
                         Condition: {
                            StringEquals: {
-                              'iam:PassedToService': {
-                                 'Fn::Sub': 'cloudformation.${AWS::URLSuffix}',
-                              },
+                              'iam:PassedToService': cloudformation.amazonaws.com,
                            },
                         },
                         Effect: Allow,
@@ -311,11 +309,7 @@ Resources:
             Statement: [
                {
                   Principal: {
-                     Service: [
-                        {
-                           'Fn::Sub': 'cloudformation.${AWS::URLSuffix}',
-                        },
-                     ],
+                     Service: cloudformation.amazonaws.com,
                   },
                   Action: [
                      'sts:AssumeRole',

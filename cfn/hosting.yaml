@@ -63,7 +63,7 @@ Resources:
             Statement:
                -
                   Principal:
-                     Service: !Sub 'lambda.${AWS::URLSuffix}'
+                     Service: lambda.amazonaws.com
                   Action: sts:AssumeRole
                   Effect: Allow
          Policies:
